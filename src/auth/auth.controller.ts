@@ -63,7 +63,7 @@ export class AuthController {
     return this.authService.login(dto, res);
   }
 
-  @Get("refresh")
+  @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Refresh token orqali access token yangilash" })
   @ApiResponse({

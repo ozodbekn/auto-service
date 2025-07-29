@@ -150,7 +150,7 @@ export class AuthService {
     }
 
     await this.prisma.users.update({
-      where: { id: userData.sub },
+      where: { id: userData.id },
       data: { refreshToken: null },
     });
 
@@ -160,7 +160,7 @@ export class AuthService {
   }
 
   async generateTokens(userId: number, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+    const payload = { id: userId, email, role };
 
     const accessToken = this.jwtService.sign(payload, {
       secret: this.config.get("ACCESS_TOKEN_KEY"),

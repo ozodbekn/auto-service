@@ -6,11 +6,13 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { refreshTokenGuard } from "../common/guards";
 
 @ApiTags("Users")
 @Controller("users")
@@ -24,6 +26,7 @@ export class UsersController {
     return this.usersService.create(createUserDto);
   }
 
+  @UseGuards(refreshTokenGuard)
   @Get()
   @ApiOperation({ summary: "Barcha foydalanuvchilarni olish" })
   @ApiResponse({ status: 200, description: "Foydalanuvchilar ro‘yxati" })
