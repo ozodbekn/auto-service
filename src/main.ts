@@ -1,31 +1,29 @@
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
-import { ConfigService } from "@nestjs/config";
 import * as cookieParser from "cookie-parser";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { ValidationPipe } from "@nestjs/common";
 
-async function start() {
+async function bootstrap() {
+  const PORT = process.env.PORT ?? 3030;
   const app = await NestFactory.create(AppModule);
-  const config = app.get(ConfigService);
-  app.use(cookieParser());
 
+  app.use(cookieParser()); 
   app.setGlobalPrefix("api");
+    app.useGlobalPipes(new ValidationPipe());
 
-  const configg = new DocumentBuilder()
-    .setTitle("Auth Service API")
-    .setDescription("Ro‘yxatdan o‘tish, login, refresh va aktivatsiya")
+  const config = new DocumentBuilder()
+    .setTitle("Dermiantin Project")
+    .setDescription("Dermantin REST API")
     .setVersion("1.0")
-    .addTag("Auth")
-    .addBearerAuth()
+    .addTag("Auth, TypeOrm")
     .build();
 
-  const document = SwaggerModule.createDocument(app, configg);
-  SwaggerModule.setup("api/docs", app, document);
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup("/api/docs", app, document);
 
-  const PORT = config.get<number>("PORT");
-
-  await app.listen(PORT ?? 3030, () => {
+  await app.listen(PORT, () => {
     console.log(`Server started at: http://localhost:${PORT}`);
   });
 }
-start();
+bootstrap();

@@ -1,60 +1,59 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
-  Get,
+  Patch,
   Param,
   Delete,
-  Put,
-  HttpCode,
-  HttpStatus,
-  Patch,
+  ParseIntPipe,
 } from "@nestjs/common";
 import { AdminService } from "./admin.service";
 import { CreateAdminDto } from "./dto/create-admin.dto";
 import { UpdateAdminDto } from "./dto/update-admin.dto";
 import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { Admin } from "./entities/admin.entity";
 
-@ApiTags("Admin")
-@Controller("admin")
+@ApiTags("Admins")
+@Controller("admins")
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Post()
-  @ApiOperation({ summary: "Admin yaratish" })
-  @ApiResponse({ status: 201, description: "Admin muvaffaqiyatli yaratildi" })
-  create(@Body() dto: CreateAdminDto) {
-    return this.adminService.create(dto);
+  @ApiOperation({ summary: "Create new admin" })
+  @ApiResponse({ status: 201, type: Admin })
+  create(@Body() createAdminDto: CreateAdminDto) {
+    return this.adminService.create(createAdminDto);
   }
 
   @Get()
-  @ApiOperation({ summary: "Barcha adminlar ro'yxati" })
-  @ApiResponse({ status: 200, description: "Adminlar ro'yxati qaytarildi" })
+  @ApiOperation({ summary: "Get all admins" })
+  @ApiResponse({ status: 200, type: [Admin] })
   findAll() {
     return this.adminService.findAll();
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "Bitta adminni olish" })
-  @ApiResponse({ status: 200, description: "Admin topildi" })
-  @ApiResponse({ status: 404, description: "Admin topilmadi" })
-  findOne(@Param("id") id: string) {
-    return this.adminService.findOne(+id);
+  @ApiOperation({ summary: "Get one admin by ID" })
+  @ApiResponse({ status: 200, type: Admin })
+  findOne(@Param("id", ParseIntPipe) id: number) {
+    return this.adminService.findOne(id);
   }
 
   @Patch(":id")
-  @ApiOperation({ summary: "Adminni yangilash" })
-  @ApiResponse({ status: 200, description: "Admin muvaffaqiyatli yangilandi" })
-  @ApiResponse({ status: 404, description: "Admin topilmadi" })
-  update(@Param("id") id: string, @Body() dto: UpdateAdminDto) {
-    return this.adminService.update(+id, dto);
+  @ApiOperation({ summary: "Update admin by ID" })
+  @ApiResponse({ status: 200, type: Admin })
+  update(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() updateAdminDto: UpdateAdminDto
+  ) {
+    return this.adminService.update(id, updateAdminDto);
   }
 
   @Delete(":id")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: "Adminni o'chirish" })
-  @ApiResponse({ status: 204, description: "Admin o'chirildi" })
-  remove(@Param("id") id: string) {
-    return this.adminService.remove(+id);
+  @ApiOperation({ summary: "Delete admin by ID" })
+  @ApiResponse({ status: 200, type: Boolean })
+  remove(@Param("id", ParseIntPipe) id: number) {
+    return this.adminService.remove(id);
   }
 }

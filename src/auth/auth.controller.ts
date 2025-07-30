@@ -2,93 +2,55 @@ import {
   Controller,
   Post,
   Body,
-  Get,
-  Param,
   Res,
-  Req,
   HttpCode,
   HttpStatus,
 } from "@nestjs/common";
+import { Response } from "express";
 import { AuthService } from "./auth.service";
-import { CreateUserDto, LoginUserDto } from "../users/dto";
-import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
-import { Response, Request } from "express";
+import { CreateUserDto } from "../user/dto/create-user.dto";
+import { CreateAdminDto } from "../admin/dto/create-admin.dto";
+import { LoginDto } from "../user/dto/login.dto";
+import { ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 
-@ApiTags("Authentication")
+@ApiTags("Auth")
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post("register")
-  @ApiOperation({ summary: "Foydalanuvchini ro'yxatdan o'tkazish" })
-  @ApiResponse({
-    status: 201,
-    description: "Activation link emailga yuborildi",
-    schema: {
-      example: { message: "Foydalanuvchi yaratildi, emailni tekshiring" },
-    },
-  })
-  async register(@Body() dto: CreateUserDto) {
-    return this.authService.register(dto);
+  @Post("register/user")
+  @ApiOperation({ summary: "Register user (USER/MANAGER)" })
+  @ApiResponse({ status: 201, description: "User registered" })
+  async registerUser(@Body() dto: CreateUserDto) {
+    return this.authService.registerUser(dto);
   }
 
-  @Get("activate/:link")
-  @ApiOperation({ summary: "Foydalanuvchini aktivatsiya qilish" })
-  @ApiResponse({
-    status: 200,
-    description: "Foydalanuvchi aktivatsiya qilindi",
-    schema: {
-      example: { message: "Foydalanuvchi muvaffaqiyatli aktivatsiya qilindi" },
-    },
-  })
-  async activate(@Param("link") link: string) {
-    await this.authService.activate(link);
-    return { message: "Foydalanuvchi muvaffaqiyatli aktivatsiya qilindi" };
+  @Post("register/admin")
+  @ApiOperation({ summary: "Register admin" })
+  @ApiResponse({ status: 201, description: "Admin registered" })
+  async registerAdmin(@Body() dto: CreateAdminDto) {
+    return this.authService.registerAdmin(dto);
   }
 
-  @Post("login")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Login qilish" })
-  @ApiResponse({
-    status: 200,
-    description: "Tokenlar qaytariladi",
-    schema: {
-      example: { accessToken: "jwt_access_token_here" },
-    },
-  })
-  async login(
-    @Body() dto: LoginUserDto,
+  @Post("login/user")
+  @ApiOperation({ summary: "User/Manager login" })
+  async loginUser(
+    @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response
   ) {
-    return this.authService.login(dto, res);
-  }
-
-  @Post("refresh")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Refresh token orqali access token yangilash" })
-  @ApiResponse({
-    status: 200,
-    description: "Yangi access token qaytariladi",
-    schema: {
-      example: { accessToken: "new_jwt_access_token_here" },
-    },
-  })
-  async refresh(@Res({ passthrough: true }) res: Response) {
-    return this.authService.refresh(res);
+    return this.authService.loginUser(dto.phone, dto.password, res);
   }
 
   @Post("logout")
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Tizimdan chiqish (logout)" })
-  @ApiResponse({
-    status: 200,
-    description: "Tizimdan chiqish muvaffaqiyatli amalga oshirildi",
-    schema: {
-      example: { message: "Tizimdan muvaffaqiyatli chiqdingiz" },
-    },
-  })
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = req.cookies?.refreshToken;
-    return this.authService.logout(token, res);
+  @ApiOperation({ summary: "Logout user/admin" })
+  async logout(@Res({ passthrough: true }) res: Response) {
+    return this.authService.logout(res);
+  }
+
+  @Post("refresh-token")
+  @ApiOperation({ summary: "Refresh token" })
+  async refresh(@Res({ passthrough: true }) res: Response) {
+    const token = res.req.cookies?.refresh_token;
+    return this.authService.refreshToken(token, res);
   }
 }

@@ -1,32 +1,43 @@
-import { Injectable } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { CreateAdminDto } from "./dto/create-admin.dto";
 import { UpdateAdminDto } from "./dto/update-admin.dto";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Admin } from "./entities/admin.entity";
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Admin)
+    private readonly adminRepo: Repository<Admin>
+  ) {}
 
-  create(data: CreateAdminDto) {
-    return this.prisma.admin.create({ data });
+  create(createAdminDto: CreateAdminDto) {
+    const admin = this.adminRepo.create(createAdminDto);
+    return this.adminRepo.save(admin);
   }
 
   findAll() {
-    return this.prisma.admin.findMany();
+    return this.adminRepo.find();
   }
 
-  findOne(id: number) {
-    return this.prisma.admin.findUnique({ where: { id } });
+  async findOne(id: number) {
+    const admin = await this.adminRepo.findOneBy({ id });
+    if (!admin) {
+      throw new NotFoundException(`Admin with ID ${id} not found`);
+    }
+    return admin;
   }
 
-  update(id: number, data: UpdateAdminDto) {
-    return this.prisma.admin.update({
-      where: { id },
-      data,
-    });
+  async update(id: number, updateAdminDto: UpdateAdminDto) {
+    const admin = await this.findOne(id);
+    Object.assign(admin, updateAdminDto);
+    return this.adminRepo.save(admin);
   }
 
-  remove(id: number) {
-    return this.prisma.admin.delete({ where: { id } });
+  async remove(id: number) {
+    const admin = await this.findOne(id);
+    await this.adminRepo.remove(admin);
+    return true;
   }
 }

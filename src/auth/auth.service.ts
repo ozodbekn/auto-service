@@ -1,177 +1,130 @@
 import {
   Injectable,
-  ForbiddenException,
   UnauthorizedException,
+  ForbiddenException,
 } from "@nestjs/common";
-import { PrismaService } from "../prisma/prisma.service";
+import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcrypt";
-import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
-import { MailService } from "../mail/mail.service";
-import { CreateUserDto, LoginUserDto } from "../users/dto";
 import { Response } from "express";
-import { v4 as uuidv4 } from "uuid";
+import { Repository } from "typeorm";
+import { JwtService } from "../common/services/jwt.service";
+import { Admin } from "../admin/entities/admin.entity";
+import { User } from "../user/entities/user.entity";
+import { CreateUserDto } from "../user/dto/create-user.dto";
+import { CreateAdminDto } from "../admin/dto/create-admin.dto";
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
-    private readonly mailService: MailService
+    @InjectRepository(Admin)
+    private readonly adminRepo: Repository<Admin>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
+    private readonly jwtService: JwtService
   ) {}
 
-  async register(dto: CreateUserDto) {
-    try {
-      const candidate = await this.prisma.users.findUnique({
-        where: { email: dto.email },
-      });
+  async registerUser(dto: CreateUserDto) {
+    const exist = await this.userRepo.findOneBy({ phone: dto.phone });
+    if (exist) throw new ForbiddenException("User already exists");
 
-      if (candidate) {
-        throw new ForbiddenException("Bu email allaqachon ro'yxatdan o'tgan");
-      }
-
-      const activationLink = uuidv4();
-
-      const user = await this.prisma.users.create({
-        data: {
-          full_name: dto.full_name,
-          phone: dto.phone,
-          email: dto.email,
-          activationLink,
-          role: dto.role || "WORKER",
-          isActivated: false,
-          isApproved: false,
-          refreshToken: "",
-        },
-      });
-
-      await this.mailService.sendActivationLink(user.email, activationLink);
-
-      return { message: "Foydalanuvchi yaratildi, emailni tekshiring" };
-    } catch (error) {
-      console.error("Register error:", error);
-      throw error;
-    }
+    const hashed = await bcrypt.hash(dto.password, 10);
+    const user = this.userRepo.create({ ...dto, password: hashed });
+    return this.userRepo.save(user);
   }
 
-  async activate(link: string) {
-    const user = await this.prisma.users.findFirst({
-      where: { activationLink: link },
-    });
+  async registerAdmin(dto: CreateAdminDto) {
+    const exist = await this.adminRepo.findOneBy({ email: dto.email });
+    if (exist) throw new ForbiddenException("Admin already exists");
 
-    if (!user) {
-      throw new ForbiddenException("Noto'g'ri aktivatsiya linki");
-    }
-
-    await this.prisma.users.update({
-      where: { id: user.id },
-      data: { isActivated: true },
-    });
-
-    return { message: "Foydalanuvchi muvaffaqiyatli aktivatsiya qilindi" };
+    const hashed = await bcrypt.hash(dto.password, 10);
+    const admin = this.adminRepo.create({ ...dto, password: hashed });
+    return this.adminRepo.save(admin);
   }
 
-  async login(dto: LoginUserDto, res: Response) {
-    const user = await this.prisma.users.findUnique({
-      where: { email: dto.email },
+  async loginUser(phone: string, password: string, res: Response) {
+    const user = await this.userRepo.findOne({
+      where: { phone },
+      select: ["id", "fullname", "password", "phone", "role"],
     });
+    if (!user) throw new UnauthorizedException("Foydalanuvchi topilmadi");
 
-    if (!user) throw new UnauthorizedException("Email topilmadi");
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) throw new UnauthorizedException("Parol noto'g'ri");
 
-    if (!user.isActivated)
-      throw new UnauthorizedException("Account aktivatsiya qilinmagan");
+    const access_token = this.jwtService.sign(
+      { sub: user.id, role: user.role },
+      false
+    );
+    const refresh_token = this.jwtService.signRefresh(
+      { sub: user.id, role: user.role },
+      false
+    );
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
-
-    await this.prisma.users.update({
-      where: { id: user.id },
-      data: { refreshToken: tokens.refreshToken },
-    });
-
-    res.cookie("refreshToken", tokens.refreshToken, {
+    res.cookie("refresh_token", refresh_token, {
       httpOnly: true,
-      maxAge: 15 * 24 * 60 * 60 * 1000,
+      sameSite: "strict",
     });
 
-    return { accessToken: tokens.accessToken };
+    return { access_token, user };
   }
 
-  async refresh(res: Response) {
-    const refreshToken = res.req.cookies?.refreshToken;
-    if (!refreshToken) throw new UnauthorizedException("Token yo'q");
-
-    const user = await this.prisma.users.findFirst({
-      where: { refreshToken },
+  async loginAdmin(identifier: string, password: string, res: Response) {
+    const admin = await this.adminRepo.findOne({
+      where: { email: identifier },
+      select: ["id", "email", "password", "full_name"],
     });
+    if (!admin) throw new UnauthorizedException("Admin not found");
 
-    if (!user) throw new UnauthorizedException("Refresh token noto'g'ri");
+    const match = await bcrypt.compare(password, admin.password);
+    if (!match) throw new UnauthorizedException("Incorrect password");
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const access_token = this.jwtService.sign(
+      { sub: admin.id, isAdmin: true },
+      true
+    );
+    const refresh_token = this.jwtService.signRefresh(
+      { sub: admin.id, isAdmin: true },
+      true
+    );
 
-    await this.prisma.users.update({
-      where: { id: user.id },
-      data: { refreshToken: tokens.refreshToken },
-    });
-
-    res.cookie("refreshToken", tokens.refreshToken, {
+    res.cookie("refresh_token", refresh_token, {
       httpOnly: true,
-      maxAge: 15 * 24 * 60 * 60 * 1000,
+      sameSite: "strict",
     });
 
-    return { accessToken: tokens.accessToken };
+    return { access_token, admin };
   }
 
-  validateRefreshToken(token: string) {
+  async refreshToken(token: string, res: Response) {
+    if (!token) throw new UnauthorizedException("No token provided");
+
     try {
-      return this.jwtService.verify(token, {
-        secret: this.config.get("REFRESH_TOKEN_KEY"),
+      const payload = this.jwtService.verifyRefresh(token, false);
+
+      const isAdmin = payload?.isAdmin === true;
+
+      const newAccess = this.jwtService.sign(
+        { sub: payload.sub, isAdmin },
+        isAdmin
+      );
+      const newRefresh = this.jwtService.signRefresh(
+        { sub: payload.sub, isAdmin },
+        isAdmin
+      );
+
+      res.cookie("refresh_token", newRefresh, {
+        httpOnly: true,
+        sameSite: "strict",
       });
+
+      return { access_token: newAccess };
     } catch {
-      return null;
+      throw new UnauthorizedException("Invalid token");
     }
   }
 
-  async logout(token: string, res: Response) {
-    if (!token) {
-      throw new UnauthorizedException("Refresh token mavjud emas");
-    }
-
-    const userData = await this.jwtService
-      .verifyAsync(token, {
-        secret: this.config.get("REFRESH_TOKEN_KEY"),
-      })
-      .catch(() => {
-        throw new UnauthorizedException("Token noto‘g‘ri yoki muddati o‘tgan");
-      });
-
-    if (!userData) {
-      throw new ForbiddenException("Ruxsat yo‘q");
-    }
-
-    await this.prisma.users.update({
-      where: { id: userData.id },
-      data: { refreshToken: null },
-    });
-
-    res.clearCookie("refreshToken", { httpOnly: true });
-
-    return { message: "Tizimdan muvaffaqiyatli chiqdingiz" };
-  }
-
-  async generateTokens(userId: number, email: string, role: string) {
-    const payload = { id: userId, email, role };
-
-    const accessToken = this.jwtService.sign(payload, {
-      secret: this.config.get("ACCESS_TOKEN_KEY"),
-      expiresIn: this.config.get("ACCESS_TOKEN_TIME"),
-    });
-
-    const refreshToken = this.jwtService.sign(payload, {
-      secret: this.config.get("REFRESH_TOKEN_KEY"),
-      expiresIn: this.config.get("REFRESH_TOKEN_TIME"),
-    });
-
-    return { accessToken, refreshToken };
+  async logout(res: Response) {
+    res.clearCookie("refresh_token");
+    return { message: "Logged out" };
   }
 }

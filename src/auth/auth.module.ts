@@ -1,15 +1,16 @@
 import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
 import { AuthService } from "./auth.service";
+import { AuthResolver } from "./auth.resolver";
 import { AuthController } from "./auth.controller";
-import { JwtModule } from "@nestjs/jwt";
-import { PrismaModule } from "../prisma/prisma.module";
+import { Admin } from "../admin/entities/admin.entity";
+import { User } from "../user/entities/user.entity";
+import { JwtService } from "../common/services/jwt.service";
 import { ConfigModule } from "@nestjs/config";
-import { MailModule } from "../mail/mail.module";
-import { AccessTokenStrategy, RefreshTokenCookieStrategy } from "../common/strategies";
 
 @Module({
-  imports: [JwtModule.register({}), PrismaModule, ConfigModule, MailModule],
+  imports: [TypeOrmModule.forFeature([User, Admin]), ConfigModule],
+  providers: [AuthService, AuthResolver, JwtService],
   controllers: [AuthController],
-  providers: [AuthService, AccessTokenStrategy, RefreshTokenCookieStrategy],
 })
 export class AuthModule {}
